@@ -60,27 +60,53 @@ function getRankBadgeStyle(rank: number): string {
   return 'bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold';
 }
 
+function getTeamLogoUrl(abbr: string, logo?: string): string {
+  if (logo) return logo;
+  const code = ({ WAS: 'wsh', JAX: 'jax' } as Record<string, string>)[abbr] || abbr.toLowerCase();
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${code}.png`;
+}
+
 /**
- * Trademark-safe Team Emblem (renders authentic team primary/secondary colors & city code
- * without external ESPN/NFL copyrighted vector logos).
+ * Team Emblem matching firstdown.studio style (renders NFL team logo inside dark circle
+ * with automatic fallback to team colors if offline/blocked).
  */
 function TeamBadge({
   abbr,
+  logo,
   color = '#1e293b',
   altColor = '#ffffff',
   size = 'md',
 }: {
   abbr: string;
+  logo?: string;
   color?: string;
   altColor?: string;
   size?: 'xs' | 'sm' | 'md' | 'lg';
 }) {
-  const sizeClasses = {
-    xs: 'w-5 h-5 text-[8px] border',
-    sm: 'w-7 h-7 text-[10px] border',
-    md: 'w-10 h-10 text-xs border-2',
-    lg: 'w-14 h-14 sm:w-16 sm:h-16 text-base sm:text-lg border-2',
+  const [imgErr, setImgErr] = useState(false);
+  const src = getTeamLogoUrl(abbr, logo);
+
+  const outerClasses = {
+    xs: 'w-5 h-5 p-0.5 border border-[#2c2e38] bg-[#0b0b0d]',
+    sm: 'w-7 h-7 p-1 border border-[#23252c] bg-[#0f1014]',
+    md: 'w-10 h-10 p-1.5 border border-[#23252c] bg-[#0f1014]',
+    lg: 'w-14 h-14 sm:w-16 sm:h-16 p-2.5 border border-[#23252c] bg-[#0f1014]',
   }[size];
+
+  if (!imgErr && abbr) {
+    return (
+      <div
+        className={`${outerClasses} rounded-full flex items-center justify-center shadow-inner shrink-0 select-none overflow-hidden`}
+      >
+        <img
+          src={src}
+          alt={`${abbr} logo`}
+          className="w-full h-full object-contain"
+          onError={() => setImgErr(true)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -88,7 +114,7 @@ function TeamBadge({
         backgroundColor: color,
         borderColor: altColor || '#ffffff',
       }}
-      className={`${sizeClasses} rounded-full flex items-center justify-center font-black tracking-tight text-white shadow-inner shrink-0 select-none`}
+      className={`${outerClasses} rounded-full flex items-center justify-center font-black tracking-tight text-white shadow-inner shrink-0 select-none text-[10px]`}
     >
       <span className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">{abbr}</span>
     </div>
@@ -96,22 +122,26 @@ function TeamBadge({
 }
 
 /**
- * Copyright-safe Player Jersey Avatar (renders jersey number or unit code in team colors
- * instead of external ESPN player headshots).
+ * Player Headshot Avatar with automatic fallback to team-color jersey badge.
  */
 function PlayerAvatar({
+  headshot,
+  teamAbbr,
   jersey,
   position,
   color = '#181920',
   altColor = '#3f3f46',
   size = 'md',
 }: {
+  headshot?: string;
+  teamAbbr?: string;
   jersey?: string;
   position: string;
   color?: string;
   altColor?: string;
   size?: 'sm' | 'md' | 'lg';
 }) {
+  const [imgErr, setImgErr] = useState(false);
   const isUnit = ['OL', 'DEF', 'HC'].includes(position);
   const label = isUnit ? position : jersey ? `#${jersey}` : position;
   const sizeClasses = {
@@ -119,6 +149,26 @@ function PlayerAvatar({
     md: 'w-10 h-10 text-xs',
     lg: 'w-12 h-12 text-sm',
   }[size];
+
+  const resolvedSrc =
+    headshot || (isUnit && teamAbbr ? getTeamLogoUrl(teamAbbr) : '');
+
+  if (resolvedSrc && !imgErr) {
+    return (
+      <div
+        className={`${sizeClasses} rounded-full bg-[#15171e] border border-[#2c2e38] overflow-hidden flex items-center justify-center shrink-0 select-none ${
+          isUnit ? 'p-1.5' : ''
+        }`}
+      >
+        <img
+          src={resolvedSrc}
+          alt={label}
+          className={`w-full h-full ${isUnit ? 'object-contain' : 'object-cover'}`}
+          onError={() => setImgErr(true)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -660,6 +710,8 @@ export default function App() {
                               </span>
 
                               <PlayerAvatar
+                                headshot={player.headshot}
+                                teamAbbr={currentRoundTeam.abbr}
                                 jersey={player.jersey}
                                 position={player.position}
                                 color={currentRoundTeam.color}
@@ -820,6 +872,8 @@ export default function App() {
                           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                             <div className="relative shrink-0">
                               <PlayerAvatar
+                                headshot={pick.player.headshot}
+                                teamAbbr={pick.team_abbr}
                                 jersey={pick.player.jersey}
                                 position={pick.player.position}
                                 color={pick.team_color}
@@ -976,6 +1030,8 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-5 pt-5 border-t border-zinc-800/80">
                   <div className="flex items-center gap-3 bg-[#0b0b0d]/80 border border-emerald-500/25 rounded-xl p-3">
                     <PlayerAvatar
+                      headshot={evaluation.mvp.player.headshot}
+                      teamAbbr={evaluation.mvp.player.team}
                       jersey={evaluation.mvp.player.jersey}
                       position={evaluation.mvp.player.position}
                       color={evaluation.mvp.player.team_color}
@@ -999,6 +1055,8 @@ export default function App() {
 
                   <div className="flex items-center gap-3 bg-[#0b0b0d]/80 border border-rose-500/25 rounded-xl p-3">
                     <PlayerAvatar
+                      headshot={evaluation.weakest_link.player.headshot}
+                      teamAbbr={evaluation.weakest_link.player.team}
                       jersey={evaluation.weakest_link.player.jersey}
                       position={evaluation.weakest_link.player.position}
                       color={evaluation.weakest_link.player.team_color}
@@ -1097,6 +1155,8 @@ export default function App() {
                           {item.slot_id}
                         </span>
                         <PlayerAvatar
+                          headshot={item.player.headshot}
+                          teamAbbr={item.player.team}
                           jersey={item.player.jersey}
                           position={item.player.position}
                           color={item.player.team_color}
@@ -1189,8 +1249,10 @@ export default function App() {
                             >
                               #{entry.pos_rank}
                             </span>
-                            <TeamBadge
-                              abbr={entry.team}
+                            <PlayerAvatar
+                              headshot={entry.headshot}
+                              teamAbbr={entry.team}
+                              position={entry.position}
                               color={entry.team_color}
                               altColor={entry.team_alt_color}
                               size="sm"
