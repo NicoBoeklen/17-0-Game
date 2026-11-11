@@ -15,7 +15,7 @@ import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 BACKEND_DIR = Path(__file__).parent
 STATIC_DIR = BACKEND_DIR / "static"
@@ -154,9 +154,23 @@ class NFLAPIHandler(BaseHTTPRequestHandler):
         self._send_security_headers()
         self.end_headers()
 
-    def do_GET(self) -> None:
+    def _resolve_request_path(self) -> str:
         parsed = urlparse(self.path)
-        path = parsed.path
+        qs = parse_qs(parsed.query)
+        if "__path" in qs and qs["__path"]:
+            p = qs["__path"][0]
+            return p if p.startswith("/") else f"/{p}"
+        forwarded = (
+            self.headers.get("x-vercel-original-path")
+            or self.headers.get("x-Original-URL")
+            or self.headers.get("x-rewrite-url")
+        )
+        if forwarded:
+            return urlparse(forwarded).path
+        return parsed.path
+
+    def do_GET(self) -> None:
+        path = self._resolve_request_path()
         try:
             if path == "/api/health":
                 self._send_json(200, handle_get_health())
@@ -189,8 +203,7 @@ class NFLAPIHandler(BaseHTTPRequestHandler):
             self._send_json(500, {"error": str(e)})
 
     def do_POST(self) -> None:
-        parsed = urlparse(self.path)
-        path = parsed.path
+        path = self._resolve_request_path()
         try:
             length = int(self.headers.get("Content-Length", "0") or "0")
         except ValueError:
